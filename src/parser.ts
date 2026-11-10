@@ -40,7 +40,8 @@ export type LineTally = {
 };
 
 export type ParseResult = {
-  version: string | null; // from ERMHDR
+  version: string | null; // from ERMHDR, second field
+  exportDate: string | null; // from ERMHDR, third field
   tables: Map<string, Table>; // in file order
   broken: BrokenRow[]; // in line order
   warnings: string[]; // file-level
@@ -66,6 +67,7 @@ export function parseXer(text: string): ParseResult {
   const tally: LineTally = { total: lines.length, structural: 0, kept: 0, rejected: 0, blank: 0, afterEnd: 0 };
 
   let version: string | null = null;
+  let exportDate: string | null = null;
   let current: Table | null = null;
   const keptTaskIds = new Map<string, number>(); // task_id -> line it was kept at
   const rejectedTaskIds = new Set<string>(); // ids of TASK rows we threw away
@@ -95,6 +97,7 @@ export function parseXer(text: string): ParseResult {
 
     if (kind === 'ERMHDR') {
       version = fields[1] ?? null;
+      exportDate = fields[2] ?? null;
       tally.structural++;
     } else if (kind === '%E') {
       endLine = lineNo;
@@ -171,7 +174,7 @@ export function parseXer(text: string): ParseResult {
     warnings.push(`${tally.afterEnd} line(s) after %E, first at line ${endLine + 1}`);
   }
 
-  return { version, tables, broken, warnings, tally };
+  return { version, exportDate, tables, broken, warnings, tally };
 }
 
 /** Per-row rules for the tables we check. Returns a reason, or null if the row is fine. */

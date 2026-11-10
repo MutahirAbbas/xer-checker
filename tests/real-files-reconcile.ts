@@ -1,12 +1,14 @@
 // TEMPORARY. Parses every .xer in data/ and prints the reconciliation per
 // table, the line tally, run time, peak memory, the non-ASCII lines, and
-// the results of the three checks.
+// the results of the three checks. Also writes report.html (temporary; the
+// cli does this in step 4).
 // Replaced by src/cli.ts in step 4. Run: npx tsx tests/real-files-reconcile.ts
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { parseXer, type ParseResult } from '../src/parser.ts';
 import { runChecks, type Finding } from '../src/checks.ts';
+import { renderReport, type FileReport } from '../src/report.ts';
 
 const fileArg = process.argv[2];
 if (fileArg === undefined) {
@@ -18,6 +20,7 @@ if (fileArg === undefined) {
     });
     if (r.status !== 0) process.exitCode = r.status ?? 1;
   }
+  writeReport(dir);
 } else {
   if (!checkOne(fileArg)) process.exitCode = 1;
 }
@@ -131,4 +134,18 @@ function extreme(findings: Finding[], check: Finding['check'], pick: 'min' | 'ma
   if (list.length === 0) return '';
   const best = list.reduce((a, b) => ((pick === 'min' ? b.floatDays! < a.floatDays! : b.floatDays! > a.floatDays!) ? b : a));
   return ` (${pick === 'min' ? 'worst' : 'max'} ${best.floatDays!.toFixed(1)} days, ${best.task_code}, line ${best.line})`;
+}
+
+/** Parse every file again in this process and write report.html. */
+function writeReport(dir: string): void {
+  const decoder = new TextDecoder('windows-1252');
+  const files: FileReport[] = [];
+  for (const name of readdirSync(dir).filter((n) => n.endsWith('.xer')).sort()) {
+    const parsed = parseXer(decoder.decode(readFileSync(join(dir, name))));
+    // Label: file name without extension, first two underscore-separated parts.
+    const label = basename(name, '.xer').split('_').slice(0, 2).join(' ');
+    files.push({ fileName: name, label, parsed, checks: runChecks(parsed) });
+  }
+  writeFileSync('report.html', renderReport(files, { highFloatDays: 44 }));
+  console.log(`\nwrote report.html (${files.length} files)`);
 }

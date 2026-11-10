@@ -13,8 +13,10 @@ test('fixture is CRLF and the parser strips the CR', () => {
   assert.equal(r.tables.get('CALENDAR')!.rows[0].fields['day_hr_cnt'], '8');
 });
 
-test('version comes from ERMHDR', () => {
+test('version and export date come from ERMHDR', () => {
   assert.equal(parseXer(fixture).version, '6.0');
+  assert.equal(parseXer(fixture).exportDate, '2026-11-11');
+  assert.equal(parseXer('ERMHDR\t7.0\n%E\n').exportDate, null);
 });
 
 test('per-table read = kept + rejected, with exact counts', () => {
