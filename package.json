@@ -1,0 +1,19 @@
+{
+  "name": "xer-checker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reads Primavera P6 .xer exports, flags untrustworthy rows, runs three schedule checks, writes one HTML report.",
+  "type": "module",
+  "scripts": {
+    "check": "tsx src/cli.ts",
+    "test": "tsx --test tests/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
