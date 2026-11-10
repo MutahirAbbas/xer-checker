@@ -1,0 +1,42 @@
+ERMHDR	6.0	2026-11-11	hand-made fixture
+%R	1	stray row
+%F	stray	header
+%T	CALENDAR
+%F	clndr_id	clndr_name	day_hr_cnt
+%R	C8	Eight hour day	8
+%R	C0	Zero hour day	0
+%R	CB	Blank hours	
+%R	CX	Bad hours	eight
+%T	TASK
+%F	task_code	task_id	task_name	task_type	status_code	total_float_hr_cnt	clndr_id
+%R	A100	1	Start milestone	TT_Mile	TK_NotStart	0	C8
+%R	A200	2	Normal task	TT_Task	TK_Active	16.0	C8
+%R	A300	3	Negative float	TT_Task	TK_NotStart	-80	C8
+%R	A400	4	High float	TT_Task	TK_NotStart	400	C8
+%R	A500	5	Finish milestone	TT_FinMile	TK_NotStart	0	C8
+%R	A600	6	No links at all	TT_Task	TK_NotStart	8	C8
+%R	A700	7	Level of effort	TT_LOE	TK_NotStart		C8
+%R	A800	8	Complete task	TT_Task	TK_Complete	-400	C8
+%R	A900	9	Zero hour calendar	TT_Task	TK_NotStart	400	C0
+%R	A950	10	Missing calendar	TT_Task	TK_NotStart	40	C9
+%R	A975	13	Blank hour calendar	TT_Task	TK_NotStart	40	CB
+%R	A960		Empty id	TT_Task	TK_NotStart	0	C8
+%R	A970	2	Duplicate id	TT_Task	TK_NotStart	0	C8
+%R	A980	11	Bad float	TT_Task	TK_NotStart	lots	C8
+%R	A990	12	Short row	TT_Task	TK_NotStart
+this line is not a known type
+%T	TASKPRED
+%F	task_id	pred_task_id
+%R	2	1
+%R	3	2
+%R	4	3
+%R	5	4
+%R	9	4
+%R	10	9
+%R	13	4
+%R	5	13
+%R	2	999
+%R	998	2
+%R	3	11
+%E
+%R	after	end
