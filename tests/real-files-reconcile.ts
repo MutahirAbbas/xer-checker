@@ -63,10 +63,10 @@ function checkOne(path: string): boolean {
   let totalRead = 0;
   for (const t of result.tables.values()) {
     totalRead += t.read;
-    const adds = t.read === t.rows.length + t.rejected;
+    const adds = t.read === t.kept + t.rejected;
     if (!adds) ok = false;
     console.log(
-      `${t.name.padEnd(14)} ${String(t.read).padStart(8)} ${String(t.rows.length).padStart(8)} ${String(t.rejected).padStart(9)}${adds ? '' : '  MISMATCH'}`,
+      `${t.name.padEnd(14)} ${String(t.read).padStart(8)} ${String(t.kept).padStart(8)} ${String(t.rejected).padStart(9)}${adds ? '' : '  MISMATCH'}`,
     );
   }
   console.log(`%R rows, all tables: ${totalRead}`);

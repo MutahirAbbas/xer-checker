@@ -125,3 +125,11 @@ test('isNumber: plain decimals only, empty string is not a number', () => {
     assert.equal(isNumber(bad), false, JSON.stringify(bad));
   }
 });
+
+test('tables other than TASK, TASKPRED and CALENDAR are counted but not stored', () => {
+  const r = parseXer('%T\tPROJECT\n%F\tproj_id\n%R\t1\n%R\t2\n%T\tTASK\n%F\ttask_id\n%R\t5\n%E\n');
+  const project = r.tables.get('PROJECT')!;
+  assert.deepEqual([project.read, project.kept, project.rejected, project.rows.length], [2, 2, 0, 0]);
+  assert.equal(r.tables.get('TASK')!.rows.length, 1);
+  assert.equal(r.tally.kept, 3);
+});

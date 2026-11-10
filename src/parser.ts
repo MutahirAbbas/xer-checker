@@ -12,10 +12,15 @@ export type Row = {
 export type Table = {
   name: string;
   columns: string[];
-  rows: Row[]; // kept rows only
+  rows: Row[]; // kept rows, stored only for the tables in STORED_TABLES
   read: number; // every %R line seen for this table
+  kept: number; // %R lines of this table that passed every rule
   rejected: number; // %R lines of this table that were rejected
 };
+
+/** Only these tables keep their row objects. Every other table is validated
+ *  and counted line by line but not stored, to keep memory down. */
+export const STORED_TABLES = new Set(['TASK', 'TASKPRED', 'CALENDAR']);
 
 /** A line the parser could not trust. `table` is null for lines outside any table. */
 export type BrokenRow = {
@@ -96,7 +101,7 @@ export function parseXer(text: string): ParseResult {
       tally.structural++;
     } else if (kind === '%T') {
       const name = fields[1] ?? '';
-      current = tables.get(name) ?? { name, columns: [], rows: [], read: 0, rejected: 0 };
+      current = tables.get(name) ?? { name, columns: [], rows: [], read: 0, kept: 0, rejected: 0 };
       tables.set(name, current);
       tally.structural++;
     } else if (kind === '%F') {
@@ -129,8 +134,9 @@ export function parseXer(text: string): ParseResult {
         reject(current.name, lineNo, reason);
         if (current.name === 'TASK' && row['task_id']) rejectedTaskIds.add(row['task_id']);
       } else {
-        current.rows.push({ line: lineNo, fields: row });
+        current.kept++;
         tally.kept++;
+        if (STORED_TABLES.has(current.name)) current.rows.push({ line: lineNo, fields: row });
         if (current.name === 'TASK') keptTaskIds.set(row['task_id'], lineNo);
       }
     } else {
@@ -149,6 +155,7 @@ export function parseXer(text: string): ParseResult {
         kept.push(row);
       } else {
         links.rejected++;
+        links.kept--;
         tally.kept--;
         reject('TASKPRED', row.line, reason);
       }
