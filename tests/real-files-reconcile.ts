@@ -1,10 +1,12 @@
 // TEMPORARY. Parses every .xer in data/ and prints the reconciliation per
-// table, the line tally, run time, peak memory and the non-ASCII lines.
+// table, the line tally, run time, peak memory, the non-ASCII lines, and
+// the results of the three checks.
 // Replaced by src/cli.ts in step 4. Run: npx tsx tests/real-files-reconcile.ts
 import { readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { parseXer } from '../src/parser.ts';
+import { parseXer, type ParseResult } from '../src/parser.ts';
+import { runChecks, type Finding } from '../src/checks.ts';
 
 const fileArg = process.argv[2];
 if (fileArg === undefined) {
@@ -92,7 +94,41 @@ function checkOne(path: string): boolean {
       console.log(`    line ${ex.line}: ${nonAscii.map((f) => JSON.stringify(f.slice(0, 60))).join(' | ')}`);
     }
   }
+  printChecks(result);
+
   console.log(`run time: ${(ms / 1000).toFixed(2)} s, peak memory: ${peakMb.toFixed(0)} MB`);
   if (!ok) console.log('RECONCILIATION FAILED');
   return ok;
+}
+
+function printChecks(parsed: ParseResult): void {
+  const r = runChecks(parsed);
+  if (!r.ok) {
+    console.log(`checks: ${r.error}`);
+    return;
+  }
+  const s = r.summary;
+  console.log('checks:');
+  console.log(`  complete tasks (skipped): ${s.completeSkipped}`);
+  console.log(`  incomplete tasks:         ${s.incompleteTasks}`);
+  console.log(`  no predecessor:           ${s.noPredecessor}`);
+  console.log(`  no successor:             ${s.noSuccessor}`);
+  console.log(`  negative float:           ${s.negativeFloat}${extreme(r.findings, 'negative_float', 'min')}`);
+  console.log(`  high float over 44 days:  ${s.highFloat}${extreme(r.findings, 'high_float', 'max')}`);
+  console.log(`  blank float not evaluated: ${s.blankFloatNotEvaluated}`);
+  console.log(`  calendar fallback used:   ${s.calendarFallbackUsed}`);
+
+  // What the high-float count would be if every task used the 8-hour
+  // fallback: same parse result, CALENDAR table removed.
+  const withoutCalendar: ParseResult = { ...parsed, tables: new Map(parsed.tables) };
+  withoutCalendar.tables.delete('CALENDAR');
+  const r8 = runChecks(withoutCalendar);
+  if (r8.ok) console.log(`  high float if 8 h assumed: ${r8.summary.highFloat} (fallback used ${r8.summary.calendarFallbackUsed})`);
+}
+
+function extreme(findings: Finding[], check: Finding['check'], pick: 'min' | 'max'): string {
+  const list = findings.filter((f) => f.check === check && f.floatDays !== null);
+  if (list.length === 0) return '';
+  const best = list.reduce((a, b) => ((pick === 'min' ? b.floatDays! < a.floatDays! : b.floatDays! > a.floatDays!) ? b : a));
+  return ` (${pick === 'min' ? 'worst' : 'max'} ${best.floatDays!.toFixed(1)} days, ${best.task_code}, line ${best.line})`;
 }
