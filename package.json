@@ -6,10 +6,11 @@
   "type": "module",
   "scripts": {
     "check": "tsx src/cli.ts",
-    "test": "tsx --test tests/"
+    "check:fixture": "tsx src/cli.ts tests/fixture.xer --report fixture-report.html",
+    "test": "tsx --test \"tests/**/*.test.ts\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
