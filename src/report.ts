@@ -23,7 +23,7 @@ const CHECKS: { name: CheckName; title: string; describe: (o: ReportOptions) => 
   { name: 'no_predecessor', title: 'No predecessor', describe: () => 'Nothing is linked before the task, so nothing controls when it starts.' },
   { name: 'no_successor', title: 'No successor', describe: () => 'Nothing is linked after the task, so a delay would not show anywhere.' },
   { name: 'negative_float', title: 'Negative float', describe: () => 'The task is already late against a required date.' },
-  { name: 'high_float', title: 'High float', describe: (o) => `More than ${o.highFloatDays} working days of slack, which usually means a missing link.` },
+  { name: 'high_float', title: 'High float', describe: (o) => `More than ${o.highFloatDays} working days of slack, which often points to missing or weak logic.` },
 ];
 
 // ---------- small helpers ----------
@@ -51,8 +51,8 @@ export function shareCaption(count: number, denominator: number, noun: string): 
   return `${share.toFixed(1)}% of ${noun}`;
 }
 
-/** Bar width as a CSS percentage, or null when there is no bar to draw. */
-export function barWidth(count: number, denominator: number): string | null {
+/** The share as a CSS percentage with two decimals, or null when there is no bar to draw. */
+export function sharePercent(count: number, denominator: number): string | null {
   if (denominator === 0 || count === 0) return null;
   return `${((count / denominator) * 100).toFixed(2)}%`;
 }
@@ -112,17 +112,16 @@ function chartSection(files: FileReport[], options: ReportOptions): string {
     const n = num(f.checks.summary.incompleteTasks);
     return i === 0 ? `${n} incomplete tasks in ${escapeHtml(f.label)}` : `${n} in ${escapeHtml(f.label)}`;
   });
-  const outOf = parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  const outOf = joinAnd(parts);
 
   const rows = CHECKS.map((check) =>
     chartRow(
       check.title,
       check.describe(options),
       files.map((f, i) => {
-        if (!f.checks.ok) return chartCell(f.label, FILE_COLOURS[i % FILE_COLOURS.length], null, 'not run', null);
+        if (!f.checks.ok) return chartCell(f.label, colour(i), null, 'not run');
         const count = f.checks.summary[summaryKey(check.name)];
-        const denominator = f.checks.summary.incompleteTasks;
-        return chartCell(f.label, colour(i), count, shareCaption(count, denominator, 'incomplete tasks'), barWidth(count, denominator));
+        return chartCell(f.label, colour(i), count, shareCaption(count, f.checks.summary.incompleteTasks, 'incomplete tasks'));
       }),
     ),
   );
@@ -132,16 +131,106 @@ function chartSection(files: FileReport[], options: ReportOptions): string {
       'Rows the parser could not read with confidence.',
       files.map((f, i) => {
         const count = f.parsed.tally.rejected;
-        const denominator = f.parsed.tally.kept + f.parsed.tally.rejected;
-        return chartCell(f.label, colour(i), count, shareCaption(count, denominator, 'rows read'), barWidth(count, denominator));
+        return chartCell(f.label, colour(i), count, shareCaption(count, f.parsed.tally.kept + f.parsed.tally.rejected, 'rows read'));
       }),
     ),
   );
 
   return `<div style="margin: 72px 0 8px"><h2 style="margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: #111111">Findings by check</h2><p style="margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: #5f5f5f; max-width: 640px">How many tasks each check flagged in each file, out of ${outOf}. One task can appear under more than one check.</p></div>
-<div style="margin-top: 20px; border-bottom: 1px solid #e4e4e4">
+
+${chartFigure(files)}
+<div style="margin-top: 28px; border-bottom: 1px solid #e4e4e4">
 ${rows.join('\n')}
 </div>`;
+}
+
+/** "a", "a and b", "a, b and c" */
+function joinAnd(parts: string[]): string {
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+// ---------- the bar chart: plain HTML and CSS ----------
+
+/** One bar of the chart: its count label and, when there is something to draw, its height. */
+type Bar = { label: string; height: string | null };
+
+function bars(files: FileReport[], check: CheckName | 'broken_rows'): Bar[] {
+  return files.map((f) => {
+    if (check === 'broken_rows') {
+      const count = f.parsed.tally.rejected;
+      return { label: num(count), height: sharePercent(count, f.parsed.tally.kept + f.parsed.tally.rejected) };
+    }
+    if (!f.checks.ok) return { label: '–', height: null };
+    const count = f.checks.summary[summaryKey(check)];
+    return { label: num(count), height: sharePercent(count, f.checks.summary.incompleteTasks) };
+  });
+}
+
+function chartFigure(files: FileReport[]): string {
+  const groups: { title: string; bars: Bar[] }[] = [
+    ...CHECKS.map((c) => ({ title: c.title, bars: bars(files, c.name) })),
+    { title: 'Broken rows', bars: bars(files, 'broken_rows') },
+  ];
+
+  // Spoken version for screen readers: each check with the count per file.
+  const spoken = groups.map(
+    (g) => `${g.title}: ${joinAnd(g.bars.map((b, i) => (b.label === '–' ? `not run in ${files[i].label}` : `${b.label} in ${files[i].label}`)))}.`,
+  );
+  const ariaLabel = escapeHtml(`Bar chart. ${spoken.join(' ')}`);
+
+  const legend = files
+    .map(
+      (f, i) =>
+        `<span style="display: inline-flex; align-items: center; gap: 8px"><span aria-hidden="true" style="display: inline-block; width: 12px; height: 12px; background: ${colour(i)}"></span>${escapeHtml(f.label)}</span>`,
+    )
+    .join('\n');
+
+  const axis = [100, 75, 50, 25, 0]
+    .map(
+      (pct) =>
+        `<span style="position: absolute; right: 10px; top: ${100 - pct}%; transform: translateY(-50%); font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: #5f5f5f">${pct}%</span>`,
+    )
+    .join('');
+  const gridlines = [0, 25, 50, 75]
+    .map((top) => `<div style="position: absolute; left: 0; right: 0; top: ${top}%; height: 1px; background: #e4e4e4"></div>`)
+    .join('');
+
+  const columns = (g: { bars: Bar[] }) =>
+    g.bars
+      .map((b, i) => {
+        const bar = b.height === null ? '' : `<div style="width: 100%; height: ${b.height}; min-height: 2px; background: ${colour(i)}"></div>`;
+        const labelColour = b.height === null ? '#5f5f5f' : '#111111';
+        return `<div style="width: 36px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; white-space: nowrap; margin-bottom: 6px; color: ${labelColour}">${b.label}</span>${bar}</div>`;
+      })
+      .join('');
+  const groupHtml = groups
+    .map((g) => `<div style="flex: 1 1 0; min-width: 0; height: 100%; display: flex; justify-content: center; align-items: flex-end; gap: 8px">${columns(g)}</div>`)
+    .join('');
+  const categories = groups
+    .map((g) => `<div style="flex: 1 1 0; min-width: 0; text-align: center; font-size: 13px; font-weight: 500; color: #111111; padding: 0 4px">${g.title}</div>`)
+    .join('');
+
+  return `<figure style="margin: 28px 0 0; border: 1px solid #e4e4e4; background: #ffffff; padding: 28px">
+<figcaption style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 10px 28px">
+<span style="font-size: 16px; font-weight: 600; color: #111111">Share flagged by each check</span>
+<span style="display: inline-flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; color: #111111">
+${legend}
+</span>
+</figcaption>
+<div style="overflow-x: auto">
+<div role="img" aria-label="${ariaLabel}" style="min-width: 560px; padding-top: 44px">
+<div style="display: flex">
+<div style="position: relative; flex: 0 0 52px; height: 280px">${axis}</div>
+<div style="position: relative; flex: 1 1 auto; min-width: 0; height: 280px; border-bottom: 1px solid #111111">${gridlines}
+<div style="position: absolute; left: 0; right: 0; top: 0; height: 100%; display: flex">${groupHtml}</div>
+</div>
+</div>
+<div style="display: flex; margin: 12px 0 0 52px">${categories}</div>
+</div>
+</div>
+<p style="margin: 20px 0 0; font-size: 13px; line-height: 1.5; color: #5f5f5f">Bar height is the share of incomplete tasks, or of rows read for broken rows. The number above each bar is the count.</p>
+</figure>`;
 }
 
 function summaryKey(check: CheckName): 'noPredecessor' | 'noSuccessor' | 'negativeFloat' | 'highFloat' {
@@ -170,15 +259,13 @@ ${cells.join('\n')}
 }
 
 /** count null means the check did not run: the number slot shows a dash. */
-function chartCell(label: string, colour: string, count: number | null, caption: string, width: string | null): string {
-  const bar = width === null ? '' : `<div style="height: 6px; width: ${width}; min-width: 4px; background: ${colour}"></div>`;
+function chartCell(label: string, colour: string, count: number | null, caption: string): string {
   return `<div style="flex: 1 1 220px; min-width: 0">
 <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5f5f5f"><span aria-hidden="true" style="display: inline-block; width: 8px; height: 8px; background: ${colour}"></span>${escapeHtml(label)}</div>
 <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-top: 8px">
 <span style="font-size: 36px; line-height: 1; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: #111111">${count === null ? '–' : num(count)}</span>
 <span style="font-size: 14px; color: #5f5f5f">${caption}</span>
 </div>
-<div style="height: 6px; background: #ececec; margin-top: 14px">${bar}</div>
 </div>`;
 }
 
@@ -380,7 +467,7 @@ ${list([
   'Level-of-effort and WBS summary rows are left out of the link check.',
   'Start milestones may have no predecessor. Finish milestones may have no successor.',
   'Blank float is unknown, not zero. It is counted, never guessed.',
-  `Hours become days using each task's own calendar. ${FALLBACK_DAY_HOURS} hours is used only when a calendar is missing, and that is counted.`,
+  `Hours become days using each task's own calendar. ${FALLBACK_DAY_HOURS} hours is used only when the calendar is missing or has no usable hours, and that is counted.`,
   'A link to a task that is not in the file does not count as a link.',
 ])}`;
 }
