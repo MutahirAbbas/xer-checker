@@ -154,3 +154,6 @@ To verify: `shasum -a 256 data/*.xer`
 - Comparing two updates of the same schedule, to show what changed between them.
 - Postgres storage for results.
 - A web page to upload a file and see the report.
+- A RAG pipeline so users can ask questions about the findings, with answers grounded in the flagged rows.
+
+Time spent: about 2 hours of build, plus time beforehand learning the XER format.
